@@ -2,42 +2,37 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Services\TTSService;
+namespace App\Http\Controllers;
+
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 
 class TTSController extends Controller
 {
-    protected $ttsService;
-
-    public function __construct(TTSService $ttsService)
+    public function synthesize(Request $request)
     {
-        $this->ttsService = $ttsService;
-    }
+        $text = $request->input('text');
 
-    public function index()
-    {
-        return view('tts.index');
-    }
-
-    public function generate(Request $request)
-    {
-        $request->validate([
-            'text' => 'required|string|max:500'
+        // POST request পাঠানো TTS API তে
+        $response = Http::post('http://127.0.0.1:5001/synthesize', [
+            'text' => $text
         ]);
 
-        $result = $this->ttsService->generateSpeech($request->text);
+        if ($response->successful()) {
+            // সার্ভার থেকে অডিও ফাইল রিসিভ
+            $audioContent = $response->body();
+            $filename = 'tts_output_' . time() . '.wav';
+            $path = storage_path("app/public/tts/$filename");
 
-        if ($result['success']) {
+            file_put_contents($path, $audioContent);
+
+            return response()->download($path);
+        } else {
             return response()->json([
-                'success' => true,
-                'audio' => $result['audio'],
-                'format' => $result['format']
-            ]);
+                'error' => 'TTS সেবা ব্যর্থ হয়েছে',
+                'status' => $response->status()
+            ], 500);
         }
-
-        return response()->json([
-            'success' => false,
-            'message' => $result['message']
-        ], 500);
     }
 }
