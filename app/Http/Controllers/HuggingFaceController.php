@@ -5,69 +5,99 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
+use Google\Cloud\TextToSpeech\V1\Client\TextToSpeechClient;
+use Google\Cloud\TextToSpeech\V1\SynthesizeSpeechRequest;
+use Google\Cloud\TextToSpeech\V1\SynthesisInput;
+use Google\Cloud\TextToSpeech\V1\VoiceSelectionParams;
+use Google\Cloud\TextToSpeech\V1\AudioConfig;
+use Google\Cloud\TextToSpeech\V1\AudioEncoding;
+use Google\Cloud\TextToSpeech\V1\SsmlVoiceGender;
 
 class HuggingFaceController extends Controller
 {
     public function enhanceUsingCodeFormer(Request $request)
     {
         $request->validate([
-            'image' => 'required|image|max:4096|mimes:jpg,jpeg,png',
+            'image' => 'required|image|mimes:jpg,jpeg,png|max:2048',
         ]);
 
-        try {
-            $image = $request->file('image');
-            $imageData = base64_encode(file_get_contents($image->getRealPath()));
+        $image = $request->file('image');
+        $imageData = file_get_contents($image);
 
-            // Use a verified working model
-            $modelEndpoint = 'https://api-inference.huggingface.co/models/TencentARC/GFPGAN';
-            // Alternative: 'https://api-inference.huggingface.co/models/ai-forever/Real-ESRGAN'
+        $url = 'https://api-inference.huggingface.co/models/nateraw/real-esrgan';
+        $token = env('HUGGINGFACE_API_TOKEN');
 
-            $response = Http::withToken(env('HUGGINGFACE_API_TOKEN'))
-                ->timeout(120)
-                ->withHeaders([
-                    'Accept' => 'image/png',
-                    'Content-Type' => 'application/json',
-                ])
-                ->post($modelEndpoint, [
-                    'inputs' => $imageData,
-                    'parameters' => [
-                        'scale' => 2 // Enhancement scale factor
-                    ],
-                    'options' => [
-                        'wait_for_model' => true
-                    ]
-                ]);
+        $response = Http::withHeaders([
+            'Authorization' => 'Bearer ' . $token,
+            'Content-Type' => 'application/octet-stream',
+        ])->withBody($imageData, 'application/octet-stream')
+            ->post($url);
 
-            if ($response->successful()) {
-                return response($response->body())
-                    ->header('Content-Type', 'image/png');
-            }
+        if ($response->successful()) {
+            $enhancedImagePath = 'images/enhanced_' . time() . '.png';
+            file_put_contents(public_path($enhancedImagePath), $response->body());
 
-            $errorDetails = $response->json();
-            $errorMessage = $errorDetails['error'] ?? $response->body();
-
-            Log::error('HuggingFace API Error', [
-                'status' => $response->status(),
-                'error' => $errorMessage,
-                'endpoint' => $modelEndpoint
+            // Return the same view as form, with enhancedImage
+            return view('enhance-form', [
+                'enhancedImage' => asset($enhancedImagePath)
             ]);
-
-            throw new \Exception($errorMessage);
-
-        } catch (\Exception $e) {
-            return response()->json([
-                'error' => 'Enhancement failed',
-                'message' => $e->getMessage(),
-                'solution' => [
-                    '1. Try a different image (JPEG format works best)',
-                    '2. Reduce image size below 2MB',
-                    '3. Verify your API token has sufficient credits',
-                    '4. Try again in a few minutes if model is loading'
-                ]
-            ], 500);
         }
-}
+        if (!$response->successful()) {
+            dd('API call failed', $response->status(), $response->body());
+        }
+
+        // For debugging, dump content type
+        dd($response->header('Content-Type'), $response->body());
+
+        return back()->withErrors(['error' => 'Enhancement failed']);
+    }
+
+
+    public function synthesizeSpeech(Request $request)
+    {
+        // Set credentials path from .env
+        putenv('GOOGLE_APPLICATION_CREDENTIALS=' . base_path(env('GOOGLE_APPLICATION_CREDENTIALS')));
+
+        // Validate input
+        $request->validate([
+            'text' => 'required|string',
+        ]);
+
+        // Initialize the client
+        $client = new TextToSpeechClient();
+
+        // Build request components
+        $input = new SynthesisInput([
+            'text' => $request->text,
+        ]);
+
+        $voice = new VoiceSelectionParams([
+            'language_code' => 'en-US',
+            'ssml_gender' => SsmlVoiceGender::FEMALE,
+        ]);
+
+        $audioConfig = new AudioConfig([
+            'audio_encoding' => AudioEncoding::MP3,
+        ]);
+
+        // Combine into one request
+        $ttsRequest = new SynthesizeSpeechRequest([
+            'input' => $input,
+            'voice' => $voice,
+            'audio_config' => $audioConfig,
+        ]);
+
+        // Call the API
+        $response = $client->synthesizeSpeech($ttsRequest);
+
+        // Save audio to file
+        $outputPath = storage_path('app/public/output.mp3');
+        file_put_contents($outputPath, $response->getAudioContent());
+
+        // Close client
+        $client->close();
+
+        // Return download response
+        return response()->download($outputPath, 'speech.mp3');
+    }
 }

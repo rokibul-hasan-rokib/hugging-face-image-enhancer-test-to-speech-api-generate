@@ -1,15 +1,5 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Image Enhancer - CodeFormer</title>
-</head>
-<body>
-    <h1>Upload Face Image</h1>
-    <form action="{{ route('enhance.image') }}" method="POST" enctype="multipart/form-data">
-        @csrf
-        <input type="file" name="image" accept="image/*" required>
-        <br><br>
-        <button type="submit">Enhance</button>
-    </form>
-</body>
-</html>
+<form action="{{ route('tts.speak') }}" method="POST">
+    @csrf
+    <textarea name="text" rows="4" placeholder="Enter text..."></textarea>
+    <button type="submit">Generate Speech</button>
+</form>

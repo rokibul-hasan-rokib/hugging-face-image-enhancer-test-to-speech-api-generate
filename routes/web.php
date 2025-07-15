@@ -13,3 +13,5 @@ Route::post('/enhance-image', [HuggingFaceController::class, 'enhanceUsingCodeFo
 
 Route::get('/tts', [TTSController::class, 'index'])->name('tts.index');
 Route::post('/tts/generate', [TTSController::class, 'generate'])->name('tts.generate');
+
+Route::post('/tts', [HuggingFaceController::class, 'synthesizeSpeech'])->name('tts.speak');
