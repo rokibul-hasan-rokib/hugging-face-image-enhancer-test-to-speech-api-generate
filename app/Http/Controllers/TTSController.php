@@ -2,37 +2,40 @@
 
 namespace App\Http\Controllers;
 
-namespace App\Http\Controllers;
-
+use App\Services\HuggingFaceTTSService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 
 class TTSController extends Controller
 {
-    public function synthesize(Request $request)
-    {
-        $text = $request->input('text');
+    protected $ttsService;
 
-        // POST request পাঠানো TTS API তে
-        $response = Http::post('http://127.0.0.1:5001/synthesize', [
-            'text' => $text
+    public function __construct(HuggingFaceTTSService $ttsService)
+    {
+        $this->ttsService = $ttsService;
+    }
+
+    public function convertTextToSpeech(Request $request)
+    {
+        $request->validate([
+            'text' => 'required|string|max:500',
         ]);
 
-        if ($response->successful()) {
-            // সার্ভার থেকে অডিও ফাইল রিসিভ
-            $audioContent = $response->body();
-            $filename = 'tts_output_' . time() . '.wav';
-            $path = storage_path("app/public/tts/$filename");
+        $audio = $this->ttsService->synthesizeSpeech($request->text);
 
-            file_put_contents($path, $audioContent);
+        return response($audio)
+            ->header('Content-Type', 'audio/flac'); // Output format (adjust if needed)
+    }
 
-            return response()->download($path);
-        } else {
-            return response()->json([
-                'error' => 'TTS সেবা ব্যর্থ হয়েছে',
-                'status' => $response->status()
-            ], 500);
-        }
+    // Optional: Save audio to storage
+    public function saveSpeech(Request $request)
+    {
+        $audio = $this->ttsService->synthesizeSpeech($request->text);
+        $filename = 'tts_' . time() . '.flac';
+        Storage::disk('public')->put($filename, $audio);
+
+        return response()->json([
+            'url' => asset("storage/{$filename}"),
+        ]);
     }
 }

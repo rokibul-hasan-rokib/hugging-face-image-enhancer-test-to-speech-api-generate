@@ -14,10 +14,10 @@ Route::get('/', fn () => view('welcome'));
 Route::get('/result', fn () => view('result'));
 Route::post('/enhance-image', [HuggingFaceController::class, 'enhanceUsingCodeFormer'])->name('enhance.image');
 
-Route::get('/tts', [TTSController::class, 'index'])->name('tts.index');
-Route::post('/tts/generate', [TTSController::class, 'generate'])->name('tts.generate');
+Route::post('/tts', [TTSController::class, 'convertTextToSpeech']);
+Route::post('/tts/save', [TTSController::class, 'saveSpeech']);
 
-Route::post('/tts', [HuggingFaceController::class, 'synthesizeSpeech'])->name('tts.speak');
+// Route::post('/tts', [HuggingFaceController::class, 'synthesizeSpeech'])->name('tts.speak');
 
 Route::get('/image-enhance', [ImageEnhancerController::class, 'index']);
 Route::post('/image-enhance', [ImageEnhancerController::class, 'enhance'])->name('enhance');
